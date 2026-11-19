@@ -138,14 +138,16 @@ export default function FileConverter() {
   const source = useMemo(() => getSourceById(sourceId) ?? null, [sourceId]);
   const destination = useMemo(() => getDestinationById(destId) ?? null, [destId]);
 
-  const refreshPremium = useCallback(async (userId: string) => {
-    const { data } = await supabase
+  const checkPremium = useCallback(async (userId: string) => {
+    const { data, error } = await supabase
       .from('premium_users')
       .select('status')
       .eq('user_id', userId)
       .eq('status', 'active')
       .maybeSingle();
-    setIsPremium(Boolean(data));
+    const premium = !error && Boolean(data);
+    setIsPremium(premium);
+    return premium;
   }, []);
 
   useEffect(() => {
@@ -157,7 +159,7 @@ export default function FileConverter() {
       setUser(nextUser);
       setAuthReady(true);
       if (nextUser) {
-        await refreshPremium(nextUser.id);
+        await checkPremium(nextUser.id);
       } else {
         setIsPremium(false);
       }
@@ -178,14 +180,14 @@ export default function FileConverter() {
         setPaywallOpen(false);
         return;
       }
-      void refreshPremium(session.user.id);
+      void checkPremium(session.user.id);
     });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [refreshPremium]);
+  }, [checkPremium]);
 
   // Restore draft + confirm Stripe checkout return
   useEffect(() => {
@@ -230,9 +232,10 @@ export default function FileConverter() {
           error?: string;
         };
 
-        if (res.ok && payload.premium && session?.user) {
+        if (res.ok && payload.premium) {
           setIsPremium(true);
-          restoreDraft();
+          setPaywallOpen(false);
+          if (session?.user) restoreDraft();
         }
         window.history.replaceState({}, '', '/');
       })();
@@ -331,6 +334,7 @@ export default function FileConverter() {
     if (!source || !destination || !loaded) return;
     if (!requireAuth()) return;
 
+    // Already premium — convert immediately, no paywall
     if (!isPremium) {
       setPaywallOpen(true);
       return;
@@ -339,10 +343,6 @@ export default function FileConverter() {
     setBusy(true);
     try {
       const result = convertRows(loaded.rows, source, destination);
-      if (!result.length) {
-        setConverted(null);
-        return;
-      }
       setConverted(result);
     } catch {
       setConverted(null);
@@ -423,7 +423,7 @@ export default function FileConverter() {
     };
   }, [source, destination]);
 
-  const showExample = !converted || converted.length === 0;
+  const showExample = !isPremium && (!converted || converted.length === 0);
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -653,7 +653,7 @@ export default function FileConverter() {
       )}
 
       {/* Live conversion preview */}
-      {converted && converted.length > 0 && (
+      {converted && (
         <div className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -661,64 +661,78 @@ export default function FileConverter() {
                 Conversion preview
               </h2>
               <p className="mt-0.5 text-sm text-slate-500">
-                <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-800 ring-1 ring-inset ring-teal-600/15">
-                  Showing {Math.min(5, converted.length)} of {converted.length}{' '}
-                  converted rows
-                </span>
+                {converted.length > 0 ? (
+                  <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-800 ring-1 ring-inset ring-teal-600/15">
+                    Showing {Math.min(5, converted.length)} of {converted.length}{' '}
+                    converted rows
+                  </span>
+                ) : (
+                  <span className="text-sm text-slate-500">
+                    No rows were mapped. Check that the file headers match the selected source.
+                  </span>
+                )}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
-            >
-              <Download className="h-4 w-4" />
-              {downloadLabel}
-            </button>
+            {converted.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
+              >
+                <Download className="h-4 w-4" />
+                {downloadLabel}
+              </button>
+            ) : null}
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  {previewHeaders.map((h) => (
-                    <th
-                      key={h}
-                      className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {previewRows.map((row, i) => (
-                  <tr key={i} className="hover:bg-slate-50/80">
-                    {previewHeaders.map((h) => (
-                      <td
-                        key={h}
-                        className="whitespace-nowrap px-3 py-2.5 text-slate-700"
-                      >
-                        {row[h] || (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
+          {converted.length > 0 ? (
+            <>
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      {previewHeaders.map((h) => (
+                        <th
+                          key={h}
+                          className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {previewRows.map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-50/80">
+                        {previewHeaders.map((h) => (
+                          <td
+                            key={h}
+                            className="whitespace-nowrap px-3 py-2.5 text-slate-700"
+                          >
+                            {row[h] || (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  </tbody>
+                </table>
+              </div>
 
-          <p className="mt-3 text-xs text-slate-400">
-            Mapped from{' '}
-            <span className="font-medium text-slate-600">{(source as SourceSchema).label}</span>
-            {' → '}
-            <span className="font-medium text-slate-600">
-              {(destination as DestinationSchema).label}
-            </span>
-            . All processing stayed in your browser.
-          </p>
+              <p className="mt-3 text-xs text-slate-400">
+                Mapped from{' '}
+                <span className="font-medium text-slate-600">
+                  {(source as SourceSchema).label}
+                </span>
+                {' → '}
+                <span className="font-medium text-slate-600">
+                  {(destination as DestinationSchema).label}
+                </span>
+                . All processing stayed in your browser.
+              </p>
+            </>
+          ) : null}
         </div>
       )}
     </div>
