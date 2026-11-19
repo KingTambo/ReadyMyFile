@@ -4,11 +4,11 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import {
   ArrowLeftRight,
-  Download,
   FileSpreadsheet,
   Loader2,
   Upload,
 } from 'lucide-react';
+import DownloadReadyModal from './DownloadReadyModal';
 import PaywallModal from './PaywallModal';
 import SearchableSelect from './SearchableSelect';
 import { supabase } from '../lib/supabase';
@@ -24,13 +24,12 @@ import {
   getSourceById,
   serializeExport,
   type Delimiter,
-  type DestinationSchema,
-  type SourceSchema,
 } from '../data/schemas';
 
 type LoadedData = {
   rows: Record<string, unknown>[];
   fileName: string;
+  isSample?: boolean;
 };
 
 type ConverterDraft = {
@@ -127,10 +126,11 @@ export default function FileConverter() {
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [destId, setDestId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<LoadedData | null>(null);
-  const [converted, setConverted] = useState<Record<string, string>[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [converted, setConverted] = useState<Record<string, string>[] | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const checkoutHandled = useRef(false);
@@ -178,6 +178,7 @@ export default function FileConverter() {
         setLoaded(null);
         setConverted(null);
         setPaywallOpen(false);
+        setDownloadOpen(false);
         return;
       }
       void checkPremium(session.user.id);
@@ -278,22 +279,20 @@ export default function FileConverter() {
 
   const canConvert = Boolean(source && destination && loaded && loaded.rows.length > 0);
 
-  const clearResults = useCallback(() => {
-    setConverted(null);
-  }, []);
-
   const handleSourceChange = (id: string | null) => {
     if (!requireAuth()) return;
     setSourceId(id);
     setLoaded(null);
-    clearResults();
+    setConverted(null);
+    setDownloadOpen(false);
     syncUrlParams(id, destId);
   };
 
   const handleDestChange = (id: string | null) => {
     if (!requireAuth()) return;
     setDestId(id);
-    clearResults();
+    setConverted(null);
+    setDownloadOpen(false);
     syncUrlParams(sourceId, id);
   };
 
@@ -304,7 +303,8 @@ export default function FileConverter() {
     setSourceId(nextFrom);
     setDestId(nextTo);
     setLoaded(null);
-    clearResults();
+    setConverted(null);
+    setDownloadOpen(false);
     syncUrlParams(nextFrom, nextTo);
   };
 
@@ -315,7 +315,8 @@ export default function FileConverter() {
     const allowed = /\.(csv|xlsx|xls|txt)$/i;
     if (!allowed.test(file.name)) return;
     setBusy(true);
-    clearResults();
+    setConverted(null);
+    setDownloadOpen(false);
     try {
       const rows = await parseFile(file, source?.delimiter);
       if (!rows.length) {
@@ -330,26 +331,49 @@ export default function FileConverter() {
     }
   };
 
+  const loadSample = () => {
+    if (!source || isPremium) return;
+    setLoaded({
+      rows: getSampleRows(source) as Record<string, unknown>[],
+      fileName: `${source.id}-sample.csv`,
+      isSample: true,
+    });
+  };
+
   const runConvert = () => {
     if (!source || !destination || !loaded) return;
     if (!requireAuth()) return;
 
-    // Already premium — convert immediately, no paywall
     if (!isPremium) {
       setPaywallOpen(true);
       return;
     }
 
-    setBusy(true);
-    try {
-      const result = convertRows(loaded.rows, source, destination);
-      setConverted(result);
-    } catch {
-      setConverted(null);
-    } finally {
-      setBusy(false);
-    }
+    const result = convertRows(loaded.rows, source, destination);
+    if (!result.length) return;
+
+    setConverted(result);
+    setDownloadOpen(true);
   };
+
+  const handleDownload = () => {
+    if (!converted || !destination || !source) return;
+    const { content, filename, mime } = serializeExport(converted, destination);
+    const stamped = filename.replace(
+      `remap-${destination.id}`,
+      `${source.id}-to-${destination.id}`
+    );
+    downloadBlob(stamped, content, mime);
+    setDownloadOpen(false);
+  };
+
+  const downloadExt = useMemo(() => {
+    if (!destination) return '';
+    return (
+      destination.fileExtension ??
+      (destination.exportFormat === 'csv' ? 'csv' : destination.exportFormat)
+    );
+  }, [destination]);
 
   const startCheckout = async () => {
     setCheckoutLoading(true);
@@ -381,29 +405,6 @@ export default function FileConverter() {
     }
   };
 
-  const handleDownload = () => {
-    if (!converted || !destination || !source) return;
-    const { content, filename, mime } = serializeExport(converted, destination);
-    const stamped = filename.replace(
-      `remap-${destination.id}`,
-      `${source.id}-to-${destination.id}`
-    );
-    downloadBlob(stamped, content, mime);
-  };
-
-  const downloadLabel = useMemo(() => {
-    if (!destination) return 'Download Converted File';
-    const ext =
-      destination.fileExtension ??
-      (destination.exportFormat === 'csv' ? 'CSV' : destination.exportFormat.toUpperCase());
-    return `Download Converted .${ext}`;
-  }, [destination]);
-
-  const previewRows = converted?.slice(0, 5) ?? [];
-  const previewHeaders =
-    destination?.columns.map((c) => c.header) ??
-    (previewRows[0] ? Object.keys(previewRows[0]) : []);
-
   // Example result (updates with selected source/dest; defaults to Chase → QuickBooks)
   const example = useMemo(() => {
     const exampleSource = source ?? getSourceById('chase')!;
@@ -423,7 +424,7 @@ export default function FileConverter() {
     };
   }, [source, destination]);
 
-  const showExample = !isPremium && (!converted || converted.length === 0);
+  const showExample = !isPremium;
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -437,6 +438,17 @@ export default function FileConverter() {
         onGetStarted={() => {
           void startCheckout();
         }}
+      />
+      <DownloadReadyModal
+        open={downloadOpen}
+        fileLabel={downloadExt ? `.${downloadExt}` : ''}
+        fromLabel={source?.label ?? ''}
+        toLabel={destination?.label ?? ''}
+        headers={destination?.columns.map((c) => c.header) ?? []}
+        rows={(converted ?? []).slice(0, 8)}
+        totalRows={converted?.length ?? 0}
+        onClose={() => setDownloadOpen(false)}
+        onDownload={handleDownload}
       />
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-8">
         {/* Step 1 & 2 */}
@@ -542,9 +554,30 @@ export default function FileConverter() {
                 {loaded.fileName}
                 <span className="text-slate-400">·</span>
                 {loaded.rows.length} rows
+                {loaded.isSample && (
+                  <span className="rounded bg-teal-50 px-1.5 py-0.5 text-teal-700">
+                    sample
+                  </span>
+                )}
               </div>
             )}
           </div>
+
+          {!isPremium && (
+            <button
+              type="button"
+              disabled={!source}
+              onClick={(e) => {
+                e.stopPropagation();
+                loadSample();
+              }}
+              className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-700"
+            >
+              {source
+                ? `Try with Sample ${source.label} File`
+                : 'Try with Sample File (select a source first)'}
+            </button>
+          )}
         </div>
 
         {/* Step 4 — Convert */}
@@ -555,14 +588,7 @@ export default function FileConverter() {
             onClick={runConvert}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500/40 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
           >
-            {busy ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Converting…
-              </>
-            ) : (
-              'Convert File'
-            )}
+            Convert File
           </button>
           <p className="mt-2 text-center text-xs text-slate-400">
             Step 4 — Select source & destination, load a file, then convert
@@ -652,89 +678,6 @@ export default function FileConverter() {
         </div>
       )}
 
-      {/* Live conversion preview */}
-      {converted && (
-        <div className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">
-                Conversion preview
-              </h2>
-              <p className="mt-0.5 text-sm text-slate-500">
-                {converted.length > 0 ? (
-                  <span className="inline-flex items-center rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-800 ring-1 ring-inset ring-teal-600/15">
-                    Showing {Math.min(5, converted.length)} of {converted.length}{' '}
-                    converted rows
-                  </span>
-                ) : (
-                  <span className="text-sm text-slate-500">
-                    No rows were mapped. Check that the file headers match the selected source.
-                  </span>
-                )}
-              </p>
-            </div>
-            {converted.length > 0 ? (
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500/30"
-              >
-                <Download className="h-4 w-4" />
-                {downloadLabel}
-              </button>
-            ) : null}
-          </div>
-
-          {converted.length > 0 ? (
-            <>
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      {previewHeaders.map((h) => (
-                        <th
-                          key={h}
-                          className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {previewRows.map((row, i) => (
-                      <tr key={i} className="hover:bg-slate-50/80">
-                        {previewHeaders.map((h) => (
-                          <td
-                            key={h}
-                            className="whitespace-nowrap px-3 py-2.5 text-slate-700"
-                          >
-                            {row[h] || (
-                              <span className="text-slate-300">—</span>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <p className="mt-3 text-xs text-slate-400">
-                Mapped from{' '}
-                <span className="font-medium text-slate-600">
-                  {(source as SourceSchema).label}
-                </span>
-                {' → '}
-                <span className="font-medium text-slate-600">
-                  {(destination as DestinationSchema).label}
-                </span>
-                . All processing stayed in your browser.
-              </p>
-            </>
-          ) : null}
-        </div>
-      )}
     </div>
   );
 }
