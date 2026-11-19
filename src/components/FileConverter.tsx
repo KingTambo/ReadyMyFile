@@ -193,7 +193,7 @@ export default function FileConverter() {
 
   // Restore draft + confirm Stripe checkout return
   useEffect(() => {
-    if (!authReady || !user || checkoutHandled.current) return;
+    if (!authReady || checkoutHandled.current) return;
 
     const params = new URLSearchParams(window.location.search);
     const checkout = params.get('checkout');
@@ -216,20 +216,32 @@ export default function FileConverter() {
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (!session?.access_token) return;
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (session?.access_token) {
+          headers.Authorization = `Bearer ${session.access_token}`;
+        }
 
         const res = await fetch('/api/confirm-checkout', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers,
           body: JSON.stringify({ sessionId }),
         });
-        const payload = (await res.json()) as { premium?: boolean; error?: string };
+        const payload = (await res.json()) as {
+          premium?: boolean;
+          error?: string;
+        };
+
         if (res.ok && payload.premium) {
-          setIsPremium(true);
-          restoreDraft();
+          if (session?.user) {
+            setIsPremium(true);
+            restoreDraft();
+          } else {
+            // Payment saved; user must be signed in to use the app
+            setError('Payment successful. Please log in to continue.');
+          }
         } else {
           setError(payload.error ?? 'Could not confirm payment.');
         }
@@ -244,6 +256,8 @@ export default function FileConverter() {
       window.history.replaceState({}, '', '/');
       return;
     }
+
+    if (!user) return;
 
     if (from) {
       const s = getSourceById(from);

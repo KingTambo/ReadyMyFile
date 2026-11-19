@@ -9,21 +9,6 @@ export const POST: APIRoute = async ({ request }) => {
     const stripe = getStripe();
     const supabaseAdmin = getSupabaseAdmin();
 
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) {
-      return json({ error: 'Not authenticated' }, 401);
-    }
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      return json({ error: 'Invalid session' }, 401);
-    }
-
     const body = (await request.json()) as { sessionId?: string };
     if (!body.sessionId) {
       return json({ error: 'Missing sessionId' }, 400);
@@ -38,17 +23,33 @@ export const POST: APIRoute = async ({ request }) => {
       return json({ error: 'Payment not completed' }, 400);
     }
 
-    const paidUserId =
+    const userId =
       session.metadata?.user_id || session.client_reference_id || null;
 
-    if (!paidUserId || paidUserId !== user.id) {
-      return json({ error: 'Checkout does not belong to this user' }, 403);
+    if (!userId) {
+      return json({ error: 'Checkout session has no user id' }, 400);
+    }
+
+    // Optional: if a logged-in token is present, it must match the payer
+    const authHeader = request.headers.get('Authorization');
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (token) {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabaseAdmin.auth.getUser(token);
+      if (userError || !user || user.id !== userId) {
+        return json({ error: 'Checkout does not belong to this user' }, 403);
+      }
     }
 
     const { error: upsertError } = await supabaseAdmin.from('premium_users').upsert(
       {
-        user_id: user.id,
-        email: user.email ?? session.customer_details?.email ?? null,
+        user_id: userId,
+        email:
+          session.customer_details?.email ??
+          session.metadata?.email ??
+          null,
         stripe_customer_id:
           typeof session.customer === 'string' ? session.customer : null,
         stripe_checkout_session_id: session.id,
@@ -69,7 +70,7 @@ export const POST: APIRoute = async ({ request }) => {
       return json({ error: upsertError.message }, 500);
     }
 
-    return json({ premium: true });
+    return json({ premium: true, userId });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Confirm failed';
     return json({ error: message }, 500);
