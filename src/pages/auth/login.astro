@@ -1,0 +1,50 @@
+---
+import AuthHeader from '../../components/auth/AuthHeader';
+import LoginForm from '../../components/auth/LoginForm';
+import '../../styles/global.css';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content="Log in to ReadyMyFile" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <title>Log in — ReadyMyFile</title>
+  </head>
+  <body class="min-h-screen font-sans text-slate-900 antialiased">
+    <div class="page-bg flex min-h-screen flex-col">
+      <header class="border-b border-slate-200/70 bg-white/70 backdrop-blur-md">
+        <div class="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+          <a
+            href="/"
+            class="font-display text-2xl tracking-tight text-slate-900 sm:text-3xl"
+          >
+            ReadyMyFile
+          </a>
+          <AuthHeader client:load />
+        </div>
+      </header>
+
+      <main class="flex flex-1 items-center justify-center px-4 pb-12 pt-6 sm:px-6 sm:pt-8">
+        <div class="flex w-full max-w-md -translate-y-10 flex-col items-center">
+          <a
+            href="/"
+            class="mb-3 inline-flex text-sm font-medium text-slate-500 transition hover:text-slate-800"
+          >
+            ← Back to converter
+          </a>
+          <LoginForm client:load />
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

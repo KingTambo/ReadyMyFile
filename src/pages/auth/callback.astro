@@ -1,0 +1,27 @@
+---
+import AuthCallback from '../../components/auth/AuthCallback';
+import '../../styles/global.css';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content="Finishing ReadyMyFile login" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <title>Signing in — ReadyMyFile</title>
+  </head>
+  <body class="min-h-screen font-sans text-slate-900 antialiased">
+    <div class="page-bg flex min-h-screen flex-col items-center justify-center px-4">
+      <AuthCallback client:load />
+    </div>
+  </body>
+</html>
