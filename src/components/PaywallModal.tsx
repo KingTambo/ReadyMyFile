@@ -11,7 +11,6 @@ const FEATURES = [
 type PaywallModalProps = {
   open: boolean;
   loading: boolean;
-  error: string | null;
   onClose: () => void;
   onGetStarted: () => void;
 };
@@ -19,7 +18,6 @@ type PaywallModalProps = {
 export default function PaywallModal({
   open,
   loading,
-  error,
   onClose,
   onGetStarted,
 }: PaywallModalProps) {
@@ -74,12 +72,6 @@ export default function PaywallModal({
             </li>
           ))}
         </ul>
-
-        {error ? (
-          <p className="mt-4 text-sm text-red-600" role="alert">
-            {error}
-          </p>
-        ) : null}
 
         <button
           type="button"

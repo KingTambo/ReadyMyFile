@@ -31,7 +31,6 @@ import {
 type LoadedData = {
   rows: Record<string, unknown>[];
   fileName: string;
-  isSample: boolean;
 };
 
 type ConverterDraft = {
@@ -129,12 +128,10 @@ export default function FileConverter() {
   const [destId, setDestId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<LoadedData | null>(null);
   const [converted, setConverted] = useState<Record<string, string>[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const checkoutHandled = useRef(false);
 
@@ -178,7 +175,6 @@ export default function FileConverter() {
         setDestId(null);
         setLoaded(null);
         setConverted(null);
-        setError(null);
         setPaywallOpen(false);
         return;
       }
@@ -234,16 +230,9 @@ export default function FileConverter() {
           error?: string;
         };
 
-        if (res.ok && payload.premium) {
-          if (session?.user) {
-            setIsPremium(true);
-            restoreDraft();
-          } else {
-            // Payment saved; user must be signed in to use the app
-            setError('Payment successful. Please log in to continue.');
-          }
-        } else {
-          setError(payload.error ?? 'Could not confirm payment.');
+        if (res.ok && payload.premium && session?.user) {
+          setIsPremium(true);
+          restoreDraft();
         }
         window.history.replaceState({}, '', '/');
       })();
@@ -288,7 +277,6 @@ export default function FileConverter() {
 
   const clearResults = useCallback(() => {
     setConverted(null);
-    setError(null);
   }, []);
 
   const handleSourceChange = (id: string | null) => {
@@ -322,39 +310,21 @@ export default function FileConverter() {
     if (!files || files.length === 0) return;
     const file = files[0];
     const allowed = /\.(csv|xlsx|xls|txt)$/i;
-    if (!allowed.test(file.name)) {
-      setError('Please upload a .csv, .xlsx, .xls, or .txt file.');
-      return;
-    }
+    if (!allowed.test(file.name)) return;
     setBusy(true);
-    setError(null);
     clearResults();
     try {
       const rows = await parseFile(file, source?.delimiter);
       if (!rows.length) {
-        setError('No rows found in that file.');
         setLoaded(null);
         return;
       }
-      setLoaded({ rows, fileName: file.name, isSample: false });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to parse file.');
+      setLoaded({ rows, fileName: file.name });
+    } catch {
       setLoaded(null);
     } finally {
       setBusy(false);
     }
-  };
-
-  const loadSample = () => {
-    if (!source) return;
-    clearResults();
-    const sampleRows = getSampleRows(source);
-    setLoaded({
-      rows: sampleRows as Record<string, unknown>[],
-      fileName: `${source.id}-sample.csv`,
-      isSample: true,
-    });
-    setError(null);
   };
 
   const runConvert = () => {
@@ -362,23 +332,19 @@ export default function FileConverter() {
     if (!requireAuth()) return;
 
     if (!isPremium) {
-      setCheckoutError(null);
       setPaywallOpen(true);
       return;
     }
 
     setBusy(true);
-    setError(null);
     try {
       const result = convertRows(loaded.rows, source, destination);
       if (!result.length) {
-        setError('Conversion produced no rows. Check that column headers match the source format.');
         setConverted(null);
         return;
       }
       setConverted(result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Conversion failed.');
+    } catch {
       setConverted(null);
     } finally {
       setBusy(false);
@@ -387,7 +353,6 @@ export default function FileConverter() {
 
   const startCheckout = async () => {
     setCheckoutLoading(true);
-    setCheckoutError(null);
     try {
       const {
         data: { session },
@@ -407,11 +372,11 @@ export default function FileConverter() {
       });
       const payload = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !payload.url) {
-        throw new Error(payload.error ?? 'Could not start checkout');
+        setCheckoutLoading(false);
+        return;
       }
       window.location.href = payload.url;
-    } catch (e) {
-      setCheckoutError(e instanceof Error ? e.message : 'Could not start checkout');
+    } catch {
       setCheckoutLoading(false);
     }
   };
@@ -465,11 +430,9 @@ export default function FileConverter() {
       <PaywallModal
         open={paywallOpen}
         loading={checkoutLoading}
-        error={checkoutError}
         onClose={() => {
           if (checkoutLoading) return;
           setPaywallOpen(false);
-          setCheckoutError(null);
         }}
         onGetStarted={() => {
           void startCheckout();
@@ -579,28 +542,9 @@ export default function FileConverter() {
                 {loaded.fileName}
                 <span className="text-slate-400">·</span>
                 {loaded.rows.length} rows
-                {loaded.isSample && (
-                  <span className="rounded bg-teal-50 px-1.5 py-0.5 text-teal-700">
-                    sample
-                  </span>
-                )}
               </div>
             )}
           </div>
-
-          <button
-            type="button"
-            disabled={!source}
-            onClick={(e) => {
-              e.stopPropagation();
-              loadSample();
-            }}
-            className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-700"
-          >
-            {source
-              ? `Try with Sample ${source.label} File`
-              : 'Try with Sample File (select a source first)'}
-          </button>
         </div>
 
         {/* Step 4 — Convert */}
@@ -624,15 +568,6 @@ export default function FileConverter() {
             Step 4 — Select source & destination, load a file, then convert
           </p>
         </div>
-
-        {error && (
-          <div
-            role="alert"
-            className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
-          >
-            {error}
-          </div>
-        )}
       </div>
 
       {/* Example result — shown until a real conversion runs */}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
 export default function AuthCallback() {
-  const [message, setMessage] = useState('Signing you in…');
+  const [message] = useState('Signing you in…');
 
   useEffect(() => {
     const finishLogin = async () => {
@@ -14,14 +14,14 @@ export default function AuthCallback() {
       if (code) {
         const { data, error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) {
-          setMessage(error.message);
+          window.location.replace('/auth/login');
           return;
         }
         user = data.user;
       } else {
         const { data, error } = await supabase.auth.getSession();
         if (error || !data.session) {
-          setMessage(error?.message ?? 'No session found. Try logging in again.');
+          window.location.replace('/auth/login');
           return;
         }
         user = data.session.user;
@@ -48,7 +48,5 @@ export default function AuthCallback() {
     void finishLogin();
   }, []);
 
-  return (
-    <p className="text-center text-sm text-slate-600">{message}</p>
-  );
+  return <p className="text-center text-sm text-slate-600">{message}</p>;
 }

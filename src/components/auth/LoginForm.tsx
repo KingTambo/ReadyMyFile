@@ -3,7 +3,6 @@ import { supabase } from '../../lib/supabase';
 
 export default function LoginForm() {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -15,7 +14,6 @@ export default function LoginForm() {
 
   const handleGoogle = async () => {
     setLoading(true);
-    setError(null);
 
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -25,7 +23,6 @@ export default function LoginForm() {
     });
 
     if (authError) {
-      setError(authError.message);
       setLoading(false);
     }
   };
@@ -41,7 +38,6 @@ export default function LoginForm() {
         <GoogleIcon />
         {loading ? 'Redirecting…' : 'Continue with Google'}
       </button>
-      {error ? <p className="text-center text-sm text-red-600">{error}</p> : null}
     </div>
   );
 }
