@@ -1,4 +1,5 @@
 ---
+import Analytics from '@vercel/analytics/astro';
 import AuthHeader from '../../components/auth/AuthHeader';
 import LoginForm from '../../components/auth/LoginForm';
 import '../../styles/global.css';
@@ -19,6 +20,7 @@ import '../../styles/global.css';
       rel="stylesheet"
     />
     <title>Log in — ReadyMyFile</title>
+    <Analytics />
   </head>
   <body class="min-h-screen font-sans text-slate-900 antialiased">
     <div class="page-bg flex min-h-screen flex-col">

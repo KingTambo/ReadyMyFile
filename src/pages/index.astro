@@ -1,4 +1,5 @@
 ---
+import Analytics from '@vercel/analytics/astro';
 import AuthHeader from '../components/auth/AuthHeader';
 import FileConverter from '../components/FileConverter';
 import { getDestinationById, getSourceById } from '../data/schemas';
@@ -38,6 +39,7 @@ const topConverters = TOP_CONVERTERS.slice(0, 50)
       rel="stylesheet"
     />
     <title>ReadyMyFile — File & Data Schema Converter</title>
+    <Analytics />
   </head>
   <body class="min-h-screen font-sans text-slate-900 antialiased">
     <div class="page-bg min-h-screen">

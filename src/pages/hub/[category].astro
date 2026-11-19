@@ -1,6 +1,7 @@
 ---
 export const prerender = true;
 
+import Analytics from '@vercel/analytics/astro';
 import AuthHeader from '../../components/auth/AuthHeader';
 import { HUBS, getHubBySlug, getHubLinks } from '../../lib/hubs';
 import '../../styles/global.css';
@@ -41,6 +42,7 @@ const description = hub.intro;
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap"
       rel="stylesheet"
     />
+    <Analytics />
   </head>
   <body class="min-h-screen font-sans text-slate-900 antialiased">
     <div class="page-bg min-h-screen">

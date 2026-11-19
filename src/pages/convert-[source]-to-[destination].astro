@@ -1,6 +1,7 @@
 ---
 export const prerender = true;
 
+import Analytics from '@vercel/analytics/astro';
 import AuthHeader from '../components/auth/AuthHeader';
 import FileConverter from '../components/FileConverter';
 import { DESTINATIONS, SOURCES } from '../data/schemas';
@@ -94,6 +95,7 @@ const faqLd = {
     />
     <script type="application/ld+json" set:html={JSON.stringify(softwareLd)} />
     <script type="application/ld+json" set:html={JSON.stringify(faqLd)} />
+    <Analytics />
   </head>
   <body class="min-h-screen font-sans text-slate-900 antialiased">
     <div class="page-bg min-h-screen">
