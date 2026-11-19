@@ -1,14 +1,14 @@
 import type { APIRoute } from 'astro';
-import { stripe, STRIPE_PRICE_ID } from '../../lib/stripe-server';
-import { supabaseAdmin } from '../../lib/supabase-admin';
+import { getStripe, getStripePriceId } from '../../lib/stripe-server';
+import { getSupabaseAdmin } from '../../lib/supabase-admin';
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    if (!STRIPE_PRICE_ID) {
-      return json({ error: 'Missing STRIPE_PRICE_ID' }, 500);
-    }
+    const stripe = getStripe();
+    const priceId = getStripePriceId();
+    const supabaseAdmin = getSupabaseAdmin();
 
     const authHeader = request.headers.get('Authorization');
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -28,7 +28,7 @@ export const POST: APIRoute = async ({ request }) => {
     const origin = new URL(request.url).origin;
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${origin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?checkout=cancel`,
       client_reference_id: user.id,

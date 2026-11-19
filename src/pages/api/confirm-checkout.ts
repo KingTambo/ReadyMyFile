@@ -1,11 +1,14 @@
 import type { APIRoute } from 'astro';
-import { stripe } from '../../lib/stripe-server';
-import { supabaseAdmin } from '../../lib/supabase-admin';
+import { getStripe } from '../../lib/stripe-server';
+import { getSupabaseAdmin } from '../../lib/supabase-admin';
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const stripe = getStripe();
+    const supabaseAdmin = getSupabaseAdmin();
+
     const authHeader = request.headers.get('Authorization');
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
     if (!token) {
@@ -28,7 +31,10 @@ export const POST: APIRoute = async ({ request }) => {
 
     const session = await stripe.checkout.sessions.retrieve(body.sessionId);
 
-    if (session.payment_status !== 'paid' && session.status !== 'complete') {
+    const paid =
+      session.payment_status === 'paid' || session.status === 'complete';
+
+    if (!paid) {
       return json({ error: 'Payment not completed' }, 400);
     }
 
@@ -42,12 +48,16 @@ export const POST: APIRoute = async ({ request }) => {
     const { error: upsertError } = await supabaseAdmin.from('premium_users').upsert(
       {
         user_id: user.id,
-        email: user.email,
+        email: user.email ?? session.customer_details?.email ?? null,
         stripe_customer_id:
           typeof session.customer === 'string' ? session.customer : null,
         stripe_checkout_session_id: session.id,
         stripe_payment_intent_id:
-          typeof session.payment_intent === 'string' ? session.payment_intent : null,
+          typeof session.subscription === 'string'
+            ? session.subscription
+            : typeof session.payment_intent === 'string'
+              ? session.payment_intent
+              : null,
         status: 'active',
         paid_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
