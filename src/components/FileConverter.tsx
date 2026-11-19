@@ -29,7 +29,6 @@ import {
 type LoadedData = {
   rows: Record<string, unknown>[];
   fileName: string;
-  isSample?: boolean;
 };
 
 type ConverterDraft = {
@@ -104,10 +103,26 @@ function downloadBlob(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
-function syncUrlParams(fromId: string | null, toId: string | null) {
+type UrlMode = 'query' | 'path';
+
+function syncUrlParams(
+  fromId: string | null,
+  toId: string | null,
+  mode: UrlMode = 'query'
+) {
   const params = new URLSearchParams(window.location.search);
   // Preserve unrelated params (e.g. checkout) except when syncing converter state
   if (params.has('checkout') || params.has('session_id')) return;
+
+  if (mode === 'path') {
+    if (fromId && toId) {
+      const next = `/convert-${fromId}-to-${toId}`;
+      if (window.location.pathname !== next) {
+        window.history.replaceState({}, '', next);
+      }
+    }
+    return;
+  }
 
   if (fromId) params.set('from', fromId);
   else params.delete('from');
@@ -119,12 +134,22 @@ function syncUrlParams(fromId: string | null, toId: string | null) {
   window.history.replaceState({}, '', next);
 }
 
-export default function FileConverter() {
+type FileConverterProps = {
+  initialSourceId?: string | null;
+  initialDestinationId?: string | null;
+  urlMode?: UrlMode;
+};
+
+export default function FileConverter({
+  initialSourceId = null,
+  initialDestinationId = null,
+  urlMode = 'query',
+}: FileConverterProps = {}) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
-  const [sourceId, setSourceId] = useState<string | null>(null);
-  const [destId, setDestId] = useState<string | null>(null);
+  const [sourceId, setSourceId] = useState<string | null>(initialSourceId);
+  const [destId, setDestId] = useState<string | null>(initialDestinationId);
   const [loaded, setLoaded] = useState<LoadedData | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -173,8 +198,8 @@ export default function FileConverter() {
       setAuthReady(true);
       if (!session) {
         setIsPremium(false);
-        setSourceId(null);
-        setDestId(null);
+        setSourceId(initialSourceId);
+        setDestId(initialDestinationId);
         setLoaded(null);
         setConverted(null);
         setPaywallOpen(false);
@@ -188,7 +213,7 @@ export default function FileConverter() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [checkPremium]);
+  }, [checkPremium, initialSourceId, initialDestinationId]);
 
   // Restore draft + confirm Stripe checkout return
   useEffect(() => {
@@ -238,7 +263,11 @@ export default function FileConverter() {
           setPaywallOpen(false);
           if (session?.user) restoreDraft();
         }
-        window.history.replaceState({}, '', '/');
+        const returnPath =
+          urlMode === 'path' && (initialSourceId || sourceId) && (initialDestinationId || destId)
+            ? `/convert-${initialSourceId ?? sourceId}-to-${initialDestinationId ?? destId}`
+            : '/';
+        window.history.replaceState({}, '', returnPath);
       })();
       return;
     }
@@ -246,11 +275,16 @@ export default function FileConverter() {
     if (checkout === 'cancel') {
       checkoutHandled.current = true;
       restoreDraft();
-      window.history.replaceState({}, '', '/');
+      const returnPath =
+        urlMode === 'path' && (initialSourceId || sourceId) && (initialDestinationId || destId)
+          ? `/convert-${initialSourceId ?? sourceId}-to-${initialDestinationId ?? destId}`
+          : '/';
+      window.history.replaceState({}, '', returnPath);
       return;
     }
 
     if (!user) return;
+    if (urlMode === 'path') return;
 
     if (from) {
       const s = getSourceById(from);
@@ -260,15 +294,16 @@ export default function FileConverter() {
       const d = getDestinationById(to);
       if (d) setDestId(d.id);
     }
-  }, [authReady, user]);
+  }, [authReady, user, urlMode, initialSourceId, initialDestinationId, sourceId, destId]);
 
-  // Keep ?from=&to= in sync when state changes from draft restore / URL hydrate
+  // Keep URL in sync with selected pair
   useEffect(() => {
-    if (!authReady || !user) return;
+    if (!authReady) return;
+    if (urlMode === 'query' && !user) return;
     const params = new URLSearchParams(window.location.search);
     if (params.has('checkout') || params.has('session_id')) return;
-    syncUrlParams(sourceId, destId);
-  }, [authReady, user, sourceId, destId]);
+    syncUrlParams(sourceId, destId, urlMode);
+  }, [authReady, user, sourceId, destId, urlMode]);
 
   const requireAuth = useCallback(() => {
     if (!authReady) return false;
@@ -279,33 +314,45 @@ export default function FileConverter() {
 
   const canConvert = Boolean(source && destination && loaded && loaded.rows.length > 0);
 
+  const goToPair = (fromId: string | null, toId: string | null) => {
+    // Full navigation keeps uploaded/sample state clean on the next page
+    if (fromId && toId) {
+      window.location.assign(`/convert-${fromId}-to-${toId}`);
+      return true;
+    }
+    return false;
+  };
+
   const handleSourceChange = (id: string | null) => {
     if (!requireAuth()) return;
-    setSourceId(id);
     setLoaded(null);
     setConverted(null);
     setDownloadOpen(false);
-    syncUrlParams(id, destId);
+    if (goToPair(id, destId)) return;
+    setSourceId(id);
+    syncUrlParams(id, destId, urlMode);
   };
 
   const handleDestChange = (id: string | null) => {
     if (!requireAuth()) return;
-    setDestId(id);
     setConverted(null);
     setDownloadOpen(false);
-    syncUrlParams(sourceId, id);
+    if (goToPair(sourceId, id)) return;
+    setDestId(id);
+    syncUrlParams(sourceId, id, urlMode);
   };
 
   const handleSwap = () => {
     if (!requireAuth()) return;
     const nextFrom = destId;
     const nextTo = sourceId;
-    setSourceId(nextFrom);
-    setDestId(nextTo);
     setLoaded(null);
     setConverted(null);
     setDownloadOpen(false);
-    syncUrlParams(nextFrom, nextTo);
+    if (goToPair(nextFrom, nextTo)) return;
+    setSourceId(nextFrom);
+    setDestId(nextTo);
+    syncUrlParams(nextFrom, nextTo, urlMode);
   };
 
   const onFiles = async (files: FileList | File[] | null) => {
@@ -329,15 +376,6 @@ export default function FileConverter() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const loadSample = () => {
-    if (!source || isPremium) return;
-    setLoaded({
-      rows: getSampleRows(source) as Record<string, unknown>[],
-      fileName: `${source.id}-sample.csv`,
-      isSample: true,
-    });
   };
 
   const runConvert = () => {
@@ -554,30 +592,9 @@ export default function FileConverter() {
                 {loaded.fileName}
                 <span className="text-slate-400">·</span>
                 {loaded.rows.length} rows
-                {loaded.isSample && (
-                  <span className="rounded bg-teal-50 px-1.5 py-0.5 text-teal-700">
-                    sample
-                  </span>
-                )}
               </div>
             )}
           </div>
-
-          {!isPremium && (
-            <button
-              type="button"
-              disabled={!source}
-              onClick={(e) => {
-                e.stopPropagation();
-                loadSample();
-              }}
-              className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:bg-white disabled:hover:text-slate-700"
-            >
-              {source
-                ? `Try with Sample ${source.label} File`
-                : 'Try with Sample File (select a source first)'}
-            </button>
-          )}
         </div>
 
         {/* Step 4 — Convert */}

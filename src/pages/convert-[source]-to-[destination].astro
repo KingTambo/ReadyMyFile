@@ -1,0 +1,367 @@
+---
+export const prerender = true;
+
+import AuthHeader from '../components/auth/AuthHeader';
+import FileConverter from '../components/FileConverter';
+import { DESTINATIONS, SOURCES } from '../data/schemas';
+import {
+  buildFaqs,
+  buildHowToSteps,
+  buildMappingRows,
+  buildRelatedLinks,
+  buildTechSpecs,
+  buildValueProp,
+  convertPath,
+  resolvePair,
+} from '../lib/convert-page';
+import '../styles/global.css';
+
+export function getStaticPaths() {
+  return SOURCES.flatMap((source) =>
+    DESTINATIONS.map((destination) => ({
+      params: { source: source.id, destination: destination.id },
+    }))
+  );
+}
+
+const sourceParam = Astro.params.source!;
+const destinationParam = Astro.params.destination!;
+const pair = resolvePair(sourceParam, destinationParam);
+
+if (!pair) {
+  return Astro.redirect('/');
+}
+
+const { source, destination } = pair;
+const site = Astro.site?.toString().replace(/\/$/, '') || 'https://readymyfile.vercel.app';
+const canonical = `${site}${convertPath(source.id, destination.id)}`;
+const title = `Convert ${source.label} to ${destination.label} | ReadyMyFile`;
+const description = buildValueProp(source, destination);
+const mappingRows = buildMappingRows(source, destination);
+const tech = buildTechSpecs(source, destination);
+const steps = buildHowToSteps(source, destination);
+const faqs = buildFaqs(source, destination);
+const related = buildRelatedLinks(source, destination);
+
+const softwareLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'ReadyMyFile',
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web Browser',
+  offers: {
+    '@type': 'Offer',
+    price: '49.00',
+    priceCurrency: 'USD',
+  },
+  description,
+  url: canonical,
+};
+
+const faqLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({
+    '@type': 'Question',
+    name: f.question,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: f.answer,
+    },
+  })),
+};
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <script type="application/ld+json" set:html={JSON.stringify(softwareLd)} />
+    <script type="application/ld+json" set:html={JSON.stringify(faqLd)} />
+  </head>
+  <body class="min-h-screen font-sans text-slate-900 antialiased">
+    <div class="page-bg min-h-screen">
+      <header class="border-b border-slate-200/70 bg-white/70 backdrop-blur-md">
+        <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+          <a
+            href="/"
+            class="font-display text-2xl tracking-tight text-slate-900 sm:text-3xl"
+          >
+            ReadyMyFile
+          </a>
+          <AuthHeader client:load />
+        </div>
+      </header>
+
+      <main>
+        <!-- Breadcrumb -->
+        <div class="border-b border-slate-200/60 bg-white/40">
+          <nav
+            aria-label="Breadcrumb"
+            class="mx-auto flex max-w-5xl flex-wrap items-center gap-1.5 px-4 py-3 text-xs text-slate-500 sm:px-6 sm:text-sm"
+          >
+            <a href="/" class="transition hover:text-slate-800">Home</a>
+            <span aria-hidden="true" class="text-slate-300">/</span>
+            <span class="text-slate-600">{source.group}</span>
+            <span aria-hidden="true" class="text-slate-300">/</span>
+            <span class="font-medium text-slate-800">
+              Convert {source.label} to {destination.label}
+            </span>
+          </nav>
+        </div>
+
+        <!-- Hero -->
+        <section class="mx-auto max-w-5xl px-4 pb-10 pt-8 sm:px-6 sm:pb-14 sm:pt-10">
+          <p class="text-sm font-medium text-teal-700">
+            {source.badge} → {destination.badge}
+          </p>
+          <h1 class="mt-2 max-w-3xl font-display text-4xl tracking-tight text-slate-900 sm:text-5xl">
+            Convert {source.label} to {destination.label}
+          </h1>
+          <p class="mt-3 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-[17px]">
+            {description}
+          </p>
+
+          <ul class="mt-5 flex flex-col gap-2 text-sm text-slate-600 sm:flex-row sm:flex-wrap sm:gap-x-5 sm:gap-y-2">
+            <li class="flex items-center gap-2">
+              <span class="h-1.5 w-1.5 rounded-full bg-teal-600"></span>
+              100% Browser-Based (Files Never Leave Your Device)
+            </li>
+            <li class="flex items-center gap-2">
+              <span class="h-1.5 w-1.5 rounded-full bg-teal-600"></span>
+              Auto Date &amp; Decimal Formatting
+            </li>
+            <li class="flex items-center gap-2">
+              <span class="h-1.5 w-1.5 rounded-full bg-teal-600"></span>
+              Instant Preview
+            </li>
+          </ul>
+
+          <div class="mt-8">
+            <FileConverter
+              client:load
+              initialSourceId={source.id}
+              initialDestinationId={destination.id}
+              urlMode="path"
+            />
+          </div>
+        </section>
+
+        <!-- Schema mapping -->
+        <section class="border-t border-slate-200/70 bg-white/50">
+          <div class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+            <h2 class="font-display text-3xl tracking-tight text-slate-900">
+              Live schema &amp; column mapping
+            </h2>
+            <p class="mt-2 max-w-2xl text-sm text-slate-600">
+              Exact field mapping from {source.label} into {destination.label}, including
+              formatting transforms applied during conversion.
+            </p>
+
+            <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                <thead class="bg-slate-50">
+                  <tr>
+                    <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {source.label} original column
+                    </th>
+                    <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {destination.label} target column
+                    </th>
+                    <th class="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Transformation rule
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  {
+                    mappingRows.map((row) => (
+                      <tr class="hover:bg-slate-50/80">
+                        <td class="px-4 py-3 font-medium text-slate-800">{row.sourceColumn}</td>
+                        <td class="px-4 py-3 text-slate-700">{row.destinationColumn}</td>
+                        <td class="px-4 py-3 text-slate-500">{row.rule}</td>
+                      </tr>
+                    ))
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- How to -->
+        <section class="border-t border-slate-200/70">
+          <div class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+            <h2 class="font-display text-3xl tracking-tight text-slate-900">
+              How to convert {source.label} to {destination.label}
+            </h2>
+            <p class="mt-2 max-w-2xl text-sm text-slate-600">
+              A practical 3-step workflow from export to import—without manual column cleanup.
+            </p>
+
+            <ol class="mt-8 grid gap-4 sm:grid-cols-3">
+              {
+                steps.map((step, index) => (
+                  <li class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                      Step {index + 1}
+                    </p>
+                    <h3 class="mt-2 text-base font-semibold text-slate-900">{step.title}</h3>
+                    <p class="mt-2 text-sm leading-relaxed text-slate-600">{step.body}</p>
+                  </li>
+                ))
+              }
+            </ol>
+          </div>
+        </section>
+
+        <!-- Tech specs -->
+        <section class="border-t border-slate-200/70 bg-white/50">
+          <div class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+            <h2 class="font-display text-3xl tracking-tight text-slate-900">
+              Technical formatting specs
+            </h2>
+            <p class="mt-2 max-w-2xl text-sm text-slate-600">
+              Quick-glance formatting rules applied for this exact pair.
+            </p>
+
+            <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Input delimiter
+                </p>
+                <p class="mt-1.5 text-sm font-medium text-slate-900">{tech.inputDelimiter}</p>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Output delimiter
+                </p>
+                <p class="mt-1.5 text-sm font-medium text-slate-900">{tech.outputDelimiter}</p>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Date schema
+                </p>
+                <p class="mt-1.5 text-sm font-medium text-slate-900">{tech.dateSchema}</p>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Decimal separator
+                </p>
+                <p class="mt-1.5 text-sm font-medium text-slate-900">{tech.decimalSeparator}</p>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:col-span-2 lg:col-span-1">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Supported files
+                </p>
+                <p class="mt-1.5 text-sm font-medium text-slate-900">{tech.fileTypes}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- FAQ -->
+        <section class="border-t border-slate-200/70">
+          <div class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+            <h2 class="font-display text-3xl tracking-tight text-slate-900">
+              {source.label} → {destination.label} FAQ
+            </h2>
+            <p class="mt-2 max-w-2xl text-sm text-slate-600">
+              Common import issues and privacy questions for this conversion pair.
+            </p>
+
+            <div class="mt-6 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-sm">
+              {
+                faqs.map((faq) => (
+                  <details class="group px-5 py-4">
+                    <summary class="cursor-pointer list-none text-sm font-semibold text-slate-900 marker:content-none [&::-webkit-details-marker]:hidden">
+                      <span class="flex items-center justify-between gap-4">
+                        {faq.question}
+                        <span class="text-slate-400 transition group-open:rotate-45">+</span>
+                      </span>
+                    </summary>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-600">{faq.answer}</p>
+                  </details>
+                ))
+              }
+            </div>
+          </div>
+        </section>
+
+        <!-- Related -->
+        <section class="border-t border-slate-200/70 bg-white/50">
+          <div class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+            <h2 class="font-display text-3xl tracking-tight text-slate-900">
+              Related converters
+            </h2>
+            <p class="mt-2 max-w-2xl text-sm text-slate-600">
+              Explore other popular destinations for {source.label}, and other sources for{' '}
+              {destination.label}.
+            </p>
+
+            <div class="mt-8 grid gap-8 lg:grid-cols-2">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-800">
+                  More destinations for {source.label}
+                </h3>
+                <ul class="mt-3 space-y-2">
+                  {
+                    related.forSource.map((link) => (
+                      <li>
+                        <a
+                          href={link.href}
+                          class="block rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:border-teal-300 hover:text-teal-800"
+                        >
+                          {link.label}
+                        </a>
+                      </li>
+                    ))
+                  }
+                </ul>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-slate-800">
+                  More sources for {destination.label}
+                </h3>
+                <ul class="mt-3 space-y-2">
+                  {
+                    related.forDestination.map((link) => (
+                      <li>
+                        <a
+                          href={link.href}
+                          class="block rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:border-teal-300 hover:text-teal-800"
+                        >
+                          {link.label}
+                        </a>
+                      </li>
+                    ))
+                  }
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="border-t border-slate-200/60 py-6 text-center text-xs text-slate-400">
+        100% client-side · Files never leave your device
+      </footer>
+    </div>
+  </body>
+</html>

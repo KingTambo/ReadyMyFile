@@ -1,7 +1,22 @@
 ---
 import AuthHeader from '../components/auth/AuthHeader';
 import FileConverter from '../components/FileConverter';
+import { getDestinationById, getSourceById } from '../data/schemas';
+import { convertPath } from '../lib/convert-page';
+import { HUBS, TOP_CONVERTERS } from '../lib/hubs';
 import '../styles/global.css';
+
+const topConverters = TOP_CONVERTERS.slice(0, 50)
+  .map((pair) => {
+    const source = getSourceById(pair.sourceId);
+    const destination = getDestinationById(pair.destinationId);
+    if (!source || !destination) return null;
+    return {
+      href: convertPath(source.id, destination.id),
+      label: `${source.label} → ${destination.label}`,
+    };
+  })
+  .filter(Boolean) as { href: string; label: string }[];
 ---
 
 <html lang="en">
@@ -15,6 +30,7 @@ import '../styles/global.css';
       name="description"
       content="Convert bank, payment, and SaaS exports into clean accounting & CRM formats in your browser."
     />
+    <link rel="canonical" href={new URL('/', Astro.site).toString()} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -26,7 +42,7 @@ import '../styles/global.css';
   <body class="min-h-screen font-sans text-slate-900 antialiased">
     <div class="page-bg min-h-screen">
       <header class="border-b border-slate-200/70 bg-white/70 backdrop-blur-md">
-        <div class="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+        <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
           <a
             href="/"
             class="font-display text-2xl tracking-tight text-slate-900 sm:text-3xl"
@@ -42,6 +58,54 @@ import '../styles/global.css';
           Convert bank, payment, and SaaS exports into clean accounting &amp; CRM formats in your browser.
         </p>
         <FileConverter client:load />
+
+        <section class="mx-auto mt-14 max-w-5xl">
+          <h2 class="font-display text-3xl tracking-tight text-slate-900">
+            Browse by category
+          </h2>
+          <p class="mt-2 max-w-2xl text-sm text-slate-600">
+            Jump into a category hub to reach every converter page in two clicks from the homepage.
+          </p>
+          <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {
+              HUBS.map((hub) => (
+                <a
+                  href={`/hub/${hub.slug}`}
+                  class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-300 hover:shadow-md"
+                >
+                  <p class="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                    {hub.kind === 'source' ? 'Source hub' : 'Destination hub'}
+                  </p>
+                  <h3 class="mt-2 text-base font-semibold text-slate-900">{hub.title}</h3>
+                  <p class="mt-2 line-clamp-3 text-sm leading-relaxed text-slate-600">
+                    {hub.intro}
+                  </p>
+                </a>
+              ))
+            }
+          </div>
+        </section>
+
+        <section class="mx-auto mt-14 max-w-5xl">
+          <h2 class="font-display text-3xl tracking-tight text-slate-900">
+            Top 50 popular converters
+          </h2>
+          <p class="mt-2 max-w-2xl text-sm text-slate-600">
+            High-intent source → destination pairs teams use most often.
+          </p>
+          <div class="mt-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {
+              topConverters.map((item) => (
+                <a
+                  href={item.href}
+                  class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:border-teal-300 hover:text-teal-800"
+                >
+                  {item.label}
+                </a>
+              ))
+            }
+          </div>
+        </section>
       </main>
 
       <footer class="border-t border-slate-200/60 py-6 text-center text-xs text-slate-400">
